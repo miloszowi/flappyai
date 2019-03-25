@@ -26,8 +26,6 @@ export class Generation {
 
     private breedingMethod: string;
 
-    private bestScore: number = 0;
-
     private spawningWalls: any;
 
     constructor() {
@@ -125,7 +123,6 @@ export class Generation {
         for (let i = 0; i < this.size; i++) {
             this._birds.push(Renderer.getInstance().createBird(this.hiddenLayerSize));
         }
-        this.bestScore = 0;
 
         setInterval(() => {
             if (this.hasDiedOut()) {
@@ -155,10 +152,8 @@ export class Generation {
             if (!bird.alive) {
                 counter += 1;
             }
-            this.bestScore = bird.score >= this.bestScore ? bird.score : this.bestScore;
         });
         const diedOut = counter === this.size;
-        Renderer.getInstance().bestScore = this.bestScore;
         Renderer.getInstance().updateInfo();
         return diedOut;
     }

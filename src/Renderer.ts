@@ -31,8 +31,6 @@ export class Renderer {
 
   public birdsTotal: number = 0;
 
-  public bestScore: number = 0;
-
   public generation: number = 0;
 
   public mutated: number = 0;
@@ -40,8 +38,6 @@ export class Renderer {
   public delta: number = 0;
 
   private background: PIXI.Sprite = PIXI.Sprite.fromImage("background.png");
-
-  private bestScoreContainer: HTMLElement = document.getElementById("bestScore") as HTMLElement;
 
   private birdsAliveContainer: HTMLElement = document.getElementById("birdsAlive") as HTMLElement;
 
@@ -127,7 +123,6 @@ export class Renderer {
 
   public updateInfo(): void {
     this.birdsAliveContainer.innerHTML = `Birds alive: ${this.birdsAlive} / ${this.birdsTotal}`;
-    this.bestScoreContainer.innerHTML = `Best score: ${this.bestScore}`;
     this.generationContainer.innerHTML = `Current generation: ${this.generation}`;
   }
 
