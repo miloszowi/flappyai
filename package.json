@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "eslint": "^5.12.0",
-    "fuse-box": "^3.6.0"
+    "fuse-box": "^3.7.1"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
