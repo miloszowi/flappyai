@@ -31,7 +31,7 @@ export const chartConfig: Object = {
                     ticks: {
                         min: 0,
                         beginAtZero: true,
-                        callback: function(value: number, index: number, values: Array<number>) {
+                        callback: function (value: number, index: number, values: Array<number>) {
                             if (Math.floor(value) === value) {
                                 return value;
                             }

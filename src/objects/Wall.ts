@@ -1,55 +1,62 @@
-import { Entity } from "../Interfaces/Entity";
+import * as PIXI from "pixi.js";
+import { Entity } from "../interfaces/Entity";
 import { Renderer } from "../Renderer";
 
 export class Wall implements Entity {
-  public x: number;
+    public x: number;
 
-  public y: number;
+    public y: number;
 
-  public height: number;
+    public height: number;
 
-  public width: number = 100;
+    public width: number = 100;
 
-  public alive: boolean = true;
+    public alive: boolean = true;
 
-  public created: boolean = false;
+    public created: boolean = false;
 
-  public readonly sprite: PIXI.Sprite;
+    public readonly sprite: PIXI.Sprite;
 
-  constructor(x:number, y:number, height: number, type: string) {
-    this.x = x;
-    this.y = y;
-    this.height = height;
-    this.sprite = PIXI.Sprite.fromImage(`pipes/pipe_${type}.png`);
-    this.sprite.width = this.width;
-    this.sprite.height = this.height;
-    this.sprite.anchor.set(0.5);
-  }
+    private renderer: Renderer;
 
-  public update(delta: number): void | boolean {
-    if (!this.alive) {
-      return false;
+    constructor(x: number, y: number, height: number, type: string, renderer: Renderer) {
+        this.x = x;
+        this.y = y;
+        this.height = height;
+        this.sprite = PIXI.Sprite.fromImage(`pipes/pipe_${type}.png`);
+        this.sprite.width = this.width;
+        this.sprite.height = this.height;
+        this.sprite.anchor.set(0.5);
+        this.renderer = renderer;
     }
-    this.x -= 7 * delta;
-    this.render();
-    if(this.x < Renderer.getInstance().pixi.screen.width && !this.created) {
-      Renderer.getInstance().walls
-      .filter(walls => walls.includes(this))[0]
-      .map(wall => wall.created = true);
-      Renderer.getInstance().createWalls();
-    }
-  }
 
-  public render(): void {
-    this.sprite.x = this.x;
-    this.sprite.y = this.y;
-    if (this.sprite.x + this.width < 0) {
-      this.alive = false;
-    }
-  }
+    public update(delta: number): void | boolean {
+        if (!this.alive) {
+            return false;
+        }
 
-  public hide(): void {
-    this.alive = false;
-    Renderer.getInstance().pixi.stage.removeChild(this.sprite);
-  }
+        this.x -= 7 * delta;
+        this.render();
+
+        if (this.x < this.renderer.pixi.screen.width && !this.created) {
+            this.renderer.walls
+                .filter(walls => walls.includes(this))[0]
+                .map(wall => wall.created = true);
+            this.renderer.createWalls();
+        }
+    }
+
+    public render(): void {
+        this.sprite.x = this.x;
+        this.sprite.y = this.y;
+
+        if (this.sprite.x + this.width < 0) {
+            this.alive = false;
+        }
+    }
+
+    public hide(): void {
+        this.alive = false;
+        this.renderer.pixi.stage.removeChild(this.sprite);
+    }
 }

@@ -1,4 +1,3 @@
 export interface NeatapticNode {
-    bias: number,
-    type: string
+    bias: number
 }

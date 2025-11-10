@@ -2,12 +2,16 @@
     font-family: ScoreFont;
     src: url('../fonts/ScoreFont.ttf')
 }
-body, html {
-    margin: 0; padding: 0;
+
+body,
+html {
+    margin: 0;
+    padding: 0;
     box-sizing: border-box;
     overflow: hidden;
     position: relative;
 }
+
 #score {
     position: absolute;
     top: 25%;
@@ -16,31 +20,102 @@ body, html {
     text-align: center;
     font-size: 12vh;
     color: #fff;
-    text-shadow: -3px -3px 0 #000,  
-    3px -3px 0 #000,
-    -3px 3px 0 #000,
-     3px 3px 0 #000;
+    text-shadow: -3px -3px 0 #000,
+        3px -3px 0 #000,
+        -3px 3px 0 #000,
+        3px 3px 0 #000;
     font-family: ScoreFont, sans-serif;
 }
 
 #info {
-  position: absolute;
-  right: 20px;
-  top: 20px;
-  width: auto;
-  display: block;
-  font-family: monospace;
-  font-size: 15px;
-  padding: 10px; margin: 0;
-  color: #3b7e6f;
-  background: rgba(255, 255, 255, 0.5);
+    position: absolute;
+    right: 20px;
+    top: 20px;
+    width: auto;
+    display: block;
+    font-family: monospace;
+    font-size: 15px;
+    padding: 10px;
+    margin: 0;
+    color: #3b7e6f;
+    background: rgba(255, 255, 255, 0.5);
 }
+
 #info li {
-  display: block;
-  position: relative;
+    display: block;
+    position: relative;
 }
+
 #chart {
     height: 200px;
     max-width: 100%;
     position: relative;
+}
+
+.bird-stats-tooltip {
+    background: linear-gradient(135deg, rgba(0, 20, 0, 0.95) 0%, rgba(0, 10, 0, 0.98) 100%);
+    color: #00ff00;
+    padding: 20px 24px;
+    border-radius: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.3), 0 0 40px rgba(0, 0, 0, 0.8), inset 0 0 10px rgba(0, 255, 0, 0.1);
+    border: 1.5px solid #00dd00;
+    pointer-events: none;
+    animation: tooltipFadeIn 0.15s ease-out;
+    width: 40vw;
+    max-width: 90vw;
+    backdrop-filter: blur(5px);
+}
+
+.stats-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.stats-content strong {
+    color: #00ff00;
+    font-size: 18px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 4px;
+    display: block;
+    font-weight: 700;
+}
+
+.stats-content div {
+    font-size: 17px;
+    color: #00ff00;
+    line-height: 1.6;
+}
+
+.stats-content hr {
+    margin: 4px 0 !important;
+    border: none !important;
+    border-top: 1px solid rgba(0, 255, 0, 0.4) !important;
+    opacity: 1;
+}
+
+@keyframes tooltipFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.network-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: 4px 0;
+    border: 1px solid rgba(0, 200, 0, 0.4);
+    border-radius: 3px;
+    background: rgba(0, 5, 0, 0.3);
+    image-rendering: crisp-edges;
 }

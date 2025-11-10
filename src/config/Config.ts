@@ -1,10 +1,12 @@
+import { BreedingMethod } from "../enums/BreedingMethod";
 import { GenerationData } from "../interfaces/GenerationData";
 
 export const config: GenerationData = {
-    mutationChance: 1,
-    size: 1000,
+    mutationChance: 5,
+    size: 100,
     pipeDistance: 20,
-    hiddenLayerSize: 4,
-    pipeGap: 30,
-    breedingMethod: "one-point",
+    speed: 2,
+    hiddenLayerSize: 12,
+    pipeGap: 20,
+    breedingMethod: BreedingMethod.ONE_POINT,
 };

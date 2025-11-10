@@ -2,30 +2,21 @@ import { GlowFilter } from "@pixi/filter-glow";
 import { Chart } from "chart.js";
 import * as PIXI from "pixi.js";
 import { chartConfig } from "./config/ChartConfig";
+import { config } from "./config/Config";
 import { Entity } from "./interfaces/Entity";
 import { Bird } from "./objects/Bird";
 import { Wall } from "./objects/Wall";
 
 export class Renderer {
-  private static instance: Renderer;
-
-  public static getInstance(): Renderer {
-    return this.instance || (this.instance = new Renderer());
-  }
-
   public pixi: PIXI.Application = new PIXI.Application(window.innerWidth, window.innerHeight, { transparent: true });
 
   public walls: Array<Array<Wall>> = [];
 
-  public chartElement: HTMLCanvasElement = document.getElementById("chart") as HTMLCanvasElement;
-
-  public chart: Chart = new Chart(this.chartElement, chartConfig);
-
   public gap: number = this.pixi.screen.height / Math.PI;
 
-  public distance: number = this.pixi.screen.width  * 0.3;
+  public distance: number = this.pixi.screen.width * 0.3;
 
-  public _pipesCount: number = 0;
+  public delta: number = 0;
 
   public birdsAlive: number = 0;
 
@@ -35,7 +26,11 @@ export class Renderer {
 
   public mutated: number = 0;
 
-  public delta: number = 0;
+  public chartElement: HTMLCanvasElement = document.getElementById("chart") as HTMLCanvasElement;
+
+  public chart: Chart = new Chart(this.chartElement, chartConfig);
+
+  private _pipesCount: number = 0;
 
   private background: PIXI.Sprite = PIXI.Sprite.fromImage("background.png");
 
@@ -45,10 +40,14 @@ export class Renderer {
 
   private mutatedContainer: HTMLElement = document.getElementById("mutated") as HTMLElement;
 
+  private speedContainer: HTMLElement = document.getElementById("speed") as HTMLElement;
+
   constructor() {
     document.body.appendChild(this.pixi.view);
     this.setupBackground();
-    this.pixi.ticker.speed = 1;
+    this.pixi.ticker.speed = config.speed;
+    this.pixi.ticker.minFPS = 60;
+    this.speedContainer.innerHTML = `speed: ${this.pixi.ticker.speed}`
   }
 
   public get pipesCount(): number {
@@ -63,51 +62,75 @@ export class Renderer {
 
   public createWalls(): void {
     const minimum = (this.pixi.screen.height / 6),
-          maximum = this.pixi.screen.height - minimum - this.gap,
-          height = Math.random() * (maximum - minimum) + minimum,
-          bottomHeight = this.pixi.screen.height - height - this.gap;
-    const instances  = [ new Wall(this.pixi.screen.width + this.distance, height / 2, height, "top"), new Wall(this.pixi.screen.width + this.distance, this.pixi.screen.height - bottomHeight / 2, bottomHeight, "bottom") ];
+      maximum = this.pixi.screen.height - minimum - this.gap,
+      height = Math.random() * (maximum - minimum) + minimum,
+      bottomHeight = this.pixi.screen.height - height - this.gap;
+    const instances = [new Wall(this.pixi.screen.width + this.distance, height / 2, height, "top", this), new Wall(this.pixi.screen.width + this.distance, this.pixi.screen.height - bottomHeight / 2, bottomHeight, "bottom", this)];
     this.walls.push(instances);
-    const [ top, bottom ] = instances;
+    const [top, bottom] = instances;
     this.add(top);
     this.add(bottom);
   }
 
   public createBird(hiddenLayerSize: number): Bird {
-    const instance = new Bird(this.pixi.screen.width / 10, (this.pixi.screen.height / 2)  - 60, hiddenLayerSize);
+    const instance = new Bird(
+      this.pixi.screen.width / 10,
+      (this.pixi.screen.height / 2) - 60,
+      hiddenLayerSize,
+      this
+    );
     this.add(instance);
     return instance;
   }
 
   public add(instance: Entity): void {
     this.pixi.stage.addChild(instance.sprite);
+
     instance.sprite.x = instance.x;
     instance.sprite.y = instance.y;
     instance.sprite.width = instance.width;
     instance.sprite.height = instance.height;
     instance.render();
+
     this.pixi.ticker.add(delta => {
       instance.update(delta);
-      Renderer.getInstance().delta = delta;
+      this.delta = delta;
     });
   }
 
-  public getInputData(x: number, y:number, width: number, height: number): Array<number> {
-    const [ closest ] = this.walls;
+  public distanceToGapCenter(y: number): number {
+    const [closest] = this.walls;
+
     if (closest !== undefined) {
       if (closest.length >= 2) {
         const [topWall, botWall] = closest;
-        const top: number = Math.abs(y - topWall.height) / this.pixi.screen.height,
-              bot: number = Math.abs((this.pixi.screen.height - botWall.height) - (y + height / 2)) / this.pixi.screen.height,
-              distanceX: number = Math.abs(x - Math.abs(topWall.x - topWall.width / 2)) / this.pixi.screen.width;
-        return [ top, bot, distanceX ];
+
+        const topGapCenter = topWall.y + topWall.height / 2;
+        const bottomGapCenter = botWall.y - botWall.height / 2;
+        const gapCenter = (topGapCenter + bottomGapCenter) / 2;
+
+        return gapCenter - y;
       }
     }
-    return [ (this.pixi.screen.height / 2) / this.pixi.screen.height, (this.pixi.screen.height / 2) / this.pixi.screen.height, 1 ];
+
+    return 0;
   }
 
-  public getDistance(x: number, y: number): number {
-    const [ closest ] = this.walls;
+  public horizontalDistanceToClosestPipe(x: number): number {
+    const [closest] = this.walls;
+
+    if (closest !== undefined) {
+      if (closest.length >= 2) {
+        const [topWall] = closest;
+        return topWall.x - x;
+      }
+    }
+
+    return 0;
+  }
+
+  public getDistance(_x: number, y: number): number {
+    const [closest] = this.walls;
     if (closest !== undefined) {
       if (closest.length >= 2) {
         const [top] = closest;
@@ -126,16 +149,47 @@ export class Renderer {
     this.generationContainer.innerHTML = `Current generation: ${this.generation}`;
   }
 
-  public updateMutated(): void {
-    this.mutatedContainer.innerHTML = `Mutated genomes in selection: ${this.mutated}`;
+  public addToChart(label: string, data: number) {
+    const chart = this.chart as any;
+    if (chart.data.labels && chart.data.datasets) {
+      chart.data.labels.push(label);
+      chart.data.datasets.forEach((dataset: any) => (dataset.data as Array<number>).push(data));
+      chart.update();
+    }
   }
 
-  public addToChart(label: string, data: number) {
-    if (this.chart.data.labels && this.chart.data.datasets) {
-      this.chart.data.labels.push(label);
-      this.chart.data.datasets.forEach(dataset => (dataset.data as Array<number>).push(data));
-      this.chart.update();
+  public nextGeneration(): void {
+    this.addToChart(`${this.generation}`, this.pipesCount);
+    this.mutatedContainer.innerHTML = `Mutated genomes in selection: ${this.mutated}`;
+
+    this.generation++;
+    this.pipesCount = 0;
+    this.mutated = 0;
+    this.birdsAlive = config.size;
+
+    this.createWalls();
+  }
+
+  public freeze(): void {
+    if (this.pixi.ticker.started) {
+      this.pixi.ticker.stop();
+    } else {
+      this.pixi.ticker.start()
     }
+  }
+
+  public speedUp(): void {
+    this.pixi.ticker.speed += 1;
+    this.updateSpeedInformation();
+  }
+
+  public speedDown(): void {
+    this.pixi.ticker.speed -= 1;
+    this.updateSpeedInformation();
+  }
+
+  private updateSpeedInformation(): void {
+    this.speedContainer.innerHTML = `speed: ${this.pixi.ticker.speed}`;
   }
 
   private setupBackground(): void {
@@ -145,5 +199,4 @@ export class Renderer {
     this.background.x = 0;
     this.background.y = 0;
   }
-
 }
