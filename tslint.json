@@ -1,74 +1,116 @@
 {
-    "rules": {
-      "array-type": [true, "generic"],
-      "class-name": true,
-      "completed-docs": [true, "enums", "classes", "methods"],
-      "encoding": true,
-      "import-spacing": true,
-      "indent": [true, "spaces", 2],
-      "max-line-length": false,
-      "no-default-export": true,
-      "ordered-imports": true,
-      "prefer-const": true,
-      "prefer-readonly": true,
-      "variable-name": [true, "ban-keywords", "check-format", "allow-leading-underscore"],
-      "arrow-parens": [true, "ban-single-arg-parens"],
-      "await-promise": true,
-      "curly": true,
-      "interface-name": [true, "never-prefix"],
-      "member-access": [true, "check-parameter-property"],
-      "no-construct": true,
-      "no-duplicate-super": true,
-      "no-duplicate-switch-case": true,
-      "no-duplicate-variable": true,
-      "no-duplicate-imports": true,
-      "arrow-return-shorthand": true,
-      "no-empty": true,
-      "no-eval": true,
-      "no-reference": true,
-      "no-null-keyword": true,
-      "no-return-await": true,
-      "no-shadowed-variable": true,
-      "no-string-throw": true,
-      "eofline": true,
-      "linebreak-style": [true, "CRLF"],
-      "deprecation": true,
-      "use-isnan": true,
-      "no-trailing-whitespace": [true, "ignore-template-strings"],
-      "no-consecutive-blank-lines": true,
-      "no-irregular-whitespace": true,
-      "prefer-template": [true, "allow-single-concat"],
-      "semicolon": [true, "always", "ignore-interfaces"],
-      "prefer-while": true,
-      "quotemark": [true, "double"],
-      "trailing-comma": [
-        true,
-        {
-          "multiline": "always",
-          "singleline": "never"
-        }
-      ],
-      "member-ordering": [
-        true,
-        {
-          "order": [
-            "public-static-field",
-            "protected-static-field",
-            "private-static-field",
-            "public-static-method",
-            "protected-static-method",
-            "private-static-method",
-            "public-instance-field",
-            "protected-instance-field",
-            "private-instance-field",
-            "public-constructor",
-            "protected-constructor",
-            "private-constructor",
-            "public-instance-method",
-            "protected-instance-method",
-            "private-instance-method"
-          ]
-        }
-      ]
-    }
+  "rules": {
+    "array-type": [
+      true,
+      "generic"
+    ],
+    "class-name": true,
+    "completed-docs": [
+      true,
+      "enums",
+      "classes",
+      "methods"
+    ],
+    "encoding": true,
+    "import-spacing": true,
+    "indent": [
+      true,
+      "spaces",
+      4
+    ],
+    "max-line-length": false,
+    "no-default-export": true,
+    "ordered-imports": true,
+    "prefer-const": true,
+    "prefer-readonly": true,
+    "variable-name": [
+      true,
+      "ban-keywords",
+      "check-format",
+      "allow-leading-underscore"
+    ],
+    "arrow-parens": [
+      true,
+      "ban-single-arg-parens"
+    ],
+    "await-promise": true,
+    "curly": true,
+    "interface-name": [
+      true,
+      "never-prefix"
+    ],
+    "member-access": [
+      true,
+      "check-parameter-property"
+    ],
+    "no-construct": true,
+    "no-duplicate-super": true,
+    "no-duplicate-switch-case": true,
+    "no-duplicate-variable": true,
+    "no-duplicate-imports": true,
+    "arrow-return-shorthand": true,
+    "no-empty": true,
+    "no-eval": true,
+    "no-reference": true,
+    "no-null-keyword": true,
+    "no-return-await": true,
+    "no-shadowed-variable": true,
+    "no-string-throw": true,
+    "eofline": true,
+    "linebreak-style": [
+      true,
+      "CRLF"
+    ],
+    "deprecation": true,
+    "use-isnan": true,
+    "no-trailing-whitespace": [
+      true,
+      "ignore-template-strings"
+    ],
+    "no-consecutive-blank-lines": true,
+    "no-irregular-whitespace": true,
+    "prefer-template": [
+      true,
+      "allow-single-concat"
+    ],
+    "semicolon": [
+      true,
+      "always",
+      "ignore-interfaces"
+    ],
+    "prefer-while": true,
+    "quotemark": [
+      true,
+      "double"
+    ],
+    "trailing-comma": [
+      true,
+      {
+        "multiline": "always",
+        "singleline": "never"
+      }
+    ],
+    "member-ordering": [
+      true,
+      {
+        "order": [
+          "public-static-field",
+          "protected-static-field",
+          "private-static-field",
+          "public-static-method",
+          "protected-static-method",
+          "private-static-method",
+          "public-instance-field",
+          "protected-instance-field",
+          "private-instance-field",
+          "public-constructor",
+          "protected-constructor",
+          "private-constructor",
+          "public-instance-method",
+          "protected-instance-method",
+          "private-instance-method"
+        ]
+      }
+    ]
   }
+}

@@ -35,7 +35,7 @@ export class Wall implements Entity {
             return false;
         }
 
-        this.x -= 7 * delta;
+        this.x -= 10 * delta;
         this.render();
 
         if (this.x < this.renderer.pixi.screen.width && !this.created) {
