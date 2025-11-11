@@ -2,26 +2,29 @@ import { config } from "./config/Config";
 import { BreedingMethod } from "./enums/BreedingMethod";
 import { NeatapticConnection } from "./interfaces/NeatapticConnection";
 import { NeatapticNode } from "./interfaces/NeatapticNode";
+import { PopulationCounts } from "./interfaces/PopulationCounts";
+import { GenerationResult } from "./interfaces/GenerationResult";
 import { Bird } from "./objects/Bird";
 import { Wall } from "./objects/Wall";
 import { Renderer } from "./Renderer";
+import { NotificationService } from "./services/NotificationService";
 
 export class Generation {
     public size: number = 0;
 
     private renderer: Renderer;
 
-    private birds: Array<Bird> = [];
+    private birds: Bird[] = [];
 
-    private generation = 1;
-
-    private elites: Array<Bird> = [];
+    private generation: number = 1;
 
     private mutationChance: number;
 
     private hiddenLayerSize: number;
 
     private breedingMethod: BreedingMethod;
+
+    private generationResults: GenerationResult[] = [];
 
     constructor(renderer: Renderer) {
         this.renderer = renderer;
@@ -40,89 +43,119 @@ export class Generation {
         this.generation++;
 
         const sortedBirds = [...this.birds].sort((a, b) => b.fitness - a.fitness);
-        const { elites, breedingChromosomes } = this.selectParents(sortedBirds);
+        const birdsWithScore = sortedBirds.filter(b => b.score >= 1).length;
+
+        const generationResult: GenerationResult = {
+            generation: this.generation - 1,
+            bestScore: sortedBirds[0].score,
+            bestFitness: sortedBirds[0].fitness,
+            avgFitness: sortedBirds.reduce((sum, b) => sum + b.fitness, 0) / sortedBirds.length,
+            maxFitness: sortedBirds[0].fitness,
+            birdsWithScoreGreaterThan1: birdsWithScore
+        };
+        this.generationResults.push(generationResult);
+
+        this.adaptMutationChance();
+
+        const elites = sortedBirds.slice(0, 2);
+        const topPerformers = sortedBirds.slice(0, Math.floor(sortedBirds.length * 0.10));
 
         this.terminate();
 
-        const populationCounts = this.calculatePopulationDistribution();
-        this.createNewPopulation(elites, breedingChromosomes, populationCounts);
+        const populationCounts = this.calculatePopulationDistribution(elites, topPerformers);
+        this.createNewPopulation(elites, topPerformers, populationCounts);
 
-        this.markElites(populationCounts.eliteCount);
         this.renderer.generation = this.generation;
-        this.renderer.nextGeneration();
+        this.renderer.nextGenerationWithStats(this.renderer.pipesCount, birdsWithScore);
     }
 
-    private selectParents(sortedBirds: Array<Bird>) {
-        const ELITE_COUNT = 2;
-        const BREEDING_POOL_PERCENTAGE = 0.5;
+    private calculatePopulationDistribution(elites: Bird[], topPerformers: Bird[]): PopulationCounts {
+        const eliteCount = elites.length;
 
-        const elites = sortedBirds.slice(0, ELITE_COUNT);
+        const skilledBirds = topPerformers.filter((bird: Bird) => bird.score >= 1)
+        let topPerformersCount: number;
 
-        const breedingPoolSize = Math.max(4, Math.floor(this.size * BREEDING_POOL_PERCENTAGE));
-        const breedingPool = sortedBirds.slice(0, breedingPoolSize);
-        const breedingChromosomes = breedingPool.map(bird => this.extractChromosome(bird));
+        if (skilledBirds.length === 0) {
+            topPerformersCount = Math.floor(this.size * 0.70);
+        } else if (skilledBirds.length < 5) {
+            topPerformersCount = Math.floor(this.size * 0.80);
+        } else if (skilledBirds.length < 15) {
+            topPerformersCount = Math.floor(this.size * 0.90);
+        } else {
+            topPerformersCount = Math.floor(this.size * 0.95);
+        }
 
-        return { elites, breedingChromosomes };
-    }
+        const randomCount = this.size - eliteCount - topPerformersCount;
 
-    private calculatePopulationDistribution() {
-        const ELITE_PERCENTAGE = 0.02; // 2%
-        const RANDOM_PERCENTAGE = 0.05; // 5%
-
-        const eliteCount = Math.floor(this.size * ELITE_PERCENTAGE);
-        const randomCount = Math.floor(this.size * RANDOM_PERCENTAGE);
-        const offspringCount = this.size - eliteCount - randomCount;
-
-        return { eliteCount, offspringCount, randomCount };
+        return {
+            eliteCount,
+            topPerformersCount,
+            randomCount
+        };
     }
 
     private createNewPopulation(
-        elites: Array<Bird>,
-        breedingChromosomes: Array<Array<number>>,
-        counts: { eliteCount: number; offspringCount: number; randomCount: number }
-    ) {
-        for (let i = 0; i < counts.eliteCount; i++) {
-            const bird = this.renderer.createBird(this.hiddenLayerSize);
-            const eliteChromosome = this.extractChromosome(elites[i]);
-            bird.setChromosome(eliteChromosome, 0);
-            this.birds.push(bird);
-        }
+        elites: Bird[],
+        topPerformers: Bird[],
+        counts: PopulationCounts
+    ): void {
+        let birdIndex = 0;
 
-        for (let i = 0; i < counts.offspringCount; i++) {
+        const topPerformersChromosomes = topPerformers.map((bird: Bird) => this.extractChromosome(bird));
+
+        for (let i = 0; i < counts.topPerformersCount; i++) {
             const bird = this.renderer.createBird(this.hiddenLayerSize);
-            const offspring = this.breedRandomParents(breedingChromosomes);
-            bird.setChromosome(offspring, this.mutationChance);
+            bird.birdIndex = birdIndex++;
+
+            if (topPerformersChromosomes.length > 0) {
+                const offspring = this.breedRandomParents(topPerformersChromosomes);
+                bird.setChromosome(offspring, this.mutationChance);
+            }
+
             this.birds.push(bird);
         }
 
         for (let i = 0; i < counts.randomCount; i++) {
             const bird = this.renderer.createBird(this.hiddenLayerSize);
-
+            bird.birdIndex = birdIndex++;
             this.birds.push(bird);
         }
+
+        elites.forEach((elite: Bird) => {
+            const newElite = this.renderer.createBird(this.hiddenLayerSize);
+            newElite.birdIndex = birdIndex++;
+
+            const eliteChromosome = this.extractChromosome(elite);
+            newElite.setChromosome(eliteChromosome, 0);
+            newElite.becomeElite();
+
+            this.birds.push(newElite);
+        })
+
+        this.renderer.birdsAlive = this.size
+
+        NotificationService.info(`${counts.eliteCount} elites were passed to next generation`);
+        NotificationService.info(`${counts.topPerformersCount} birds were populated by ${topPerformers.length} top performers`);
+        NotificationService.info(`${counts.randomCount} birds were randomly generated`);
     }
 
-    private breedRandomParents(breedingChromosomes: Array<Array<number>>): Array<number> {
+    private breedRandomParents(breedingChromosomes: number[][]): number[] {
         const parentAIndex = Math.floor(Math.random() * breedingChromosomes.length);
-        const parentBIndex = Math.floor(Math.random() * breedingChromosomes.length);
+        let parentBIndex = Math.floor(Math.random() * breedingChromosomes.length);
 
+        if (breedingChromosomes.length > 1) {
+            while (parentBIndex === parentAIndex) {
+                parentBIndex = Math.floor(Math.random() * breedingChromosomes.length);
+            }
+        }
         const chromosomeA = breedingChromosomes[parentAIndex];
         const chromosomeB = breedingChromosomes[parentBIndex];
 
         return this.crossOver(chromosomeA, chromosomeB, this.breedingMethod);
     }
 
-    private markElites(eliteCount: number): void {
-        const filter = this.renderer.getFilter();
-
-        for (let i = 0; i < eliteCount; i++) {
-            this.birds[i].sprite.filters = [filter];
-            this.birds[i].sprite.texture = this.birds[i].textureElite;
-        }
-    }
-
-    private extractChromosome(bird: Bird): Array<number> {
-        const chromosome: Array<number> = [];
+    private extractChromosome(bird: Bird): number[] {
+        const chromosome: number[] = [];
 
         bird.network.connections.forEach((connection: NeatapticConnection) => {
             chromosome.push(connection.weight);
@@ -138,15 +171,17 @@ export class Generation {
         this.renderer.createWalls();
 
         for (let i = 0; i < this.size; i++) {
-            this.birds.push(
-                this.renderer.createBird(this.hiddenLayerSize)
-            );
+            const bird = this.renderer.createBird(this.hiddenLayerSize);
+            bird.birdIndex = i;
+            this.birds.push(bird);
         }
 
         setInterval(() => {
             if (this.hasDiedOut()) {
                 this.nextGeneration();
             }
+
+            this.renderer.updateBirdsPanel(this.birds);
         }, 100);
 
         document.addEventListener("keyup", e => {
@@ -158,7 +193,7 @@ export class Generation {
 
     private terminate(): void {
         this.birds.forEach((bird: Bird) => {
-            bird.die();
+            bird.remove();
         });
 
         this.renderer.walls.forEach((walls: Array<Wall>) => {
@@ -177,7 +212,7 @@ export class Generation {
         return this.renderer.birdsAlive === 0;
     }
 
-    private crossOver(chromosomeA: Array<number>, chromosomeB: Array<number>, breedingMethod: BreedingMethod): Array<number> {
+    private crossOver(chromosomeA: number[], chromosomeB: number[], breedingMethod: BreedingMethod): number[] {
         switch (breedingMethod) {
             case BreedingMethod.UNIFORM:
                 return this.uniformCrossOver(chromosomeA, chromosomeB);
@@ -190,39 +225,25 @@ export class Generation {
         }
     }
 
-    private uniformCrossOver(chromosomeA: Array<number>, chromosomeB: Array<number>): Array<number> {
+    private uniformCrossOver(chromosomeA: number[], chromosomeB: number[]): number[] {
         const offspring = chromosomeA.map((gene: number, index: number) =>
             Math.random() > 0.5 ? gene : chromosomeB[index]
         );
 
-        console.group(`%c🧬 Uniform Crossover`, 'color: #00ff00; font-weight: bold; font-size: 14px;');
-        console.log('%cParent A:', 'color: #ff6b6b; font-weight: bold;', chromosomeA.map(g => g.toFixed(2)));
-        console.log('%cParent B:', 'color: #4ecdc4; font-weight: bold;', chromosomeB.map(g => g.toFixed(2)));
-        console.log('%cOffspring:', 'color: #ffd93d; font-weight: bold;', offspring.map(g => g.toFixed(2)));
-        console.log('%cMethod:', 'color: #95e1d3; font-style: italic;', 'Random selection from each parent at each position');
-        console.groupEnd();
-
         return offspring;
     }
 
-    private onePointCrossOver(chromosomeA: Array<number>, chromosomeB: Array<number>): Array<number> {
+    private onePointCrossOver(chromosomeA: number[], chromosomeB: number[]): number[] {
         const crossoverPoint = Math.floor(Math.random() * chromosomeA.length);
 
         const offspring = chromosomeA.map((gene: number, index: number) =>
             index < crossoverPoint ? gene : chromosomeB[index]
         );
 
-        console.group(`%c🧬 One-Point Crossover (Point: ${crossoverPoint})`, 'color: #00ff00; font-weight: bold; font-size: 14px;');
-        console.log('%cParent A:', 'color: #ff6b6b; font-weight: bold;', chromosomeA.map(g => g.toFixed(2)));
-        console.log('%cParent B:', 'color: #4ecdc4; font-weight: bold;', chromosomeB.map(g => g.toFixed(2)));
-        console.log('%cOffspring:', 'color: #ffd93d; font-weight: bold;', offspring.map(g => g.toFixed(2)));
-        console.log('%cCrossover point at index:', 'color: #95e1d3; font-style: italic;', crossoverPoint);
-        console.groupEnd();
-
         return offspring;
     }
 
-    private twoPointCrossOver(chromosomeA: Array<number>, chromosomeB: Array<number>): Array<number> {
+    private twoPointCrossOver(chromosomeA: number[], chromosomeB: number[]): number[] {
         let point1 = Math.floor(Math.random() * chromosomeA.length);
         let point2 = Math.floor(Math.random() * chromosomeA.length);
 
@@ -234,13 +255,64 @@ export class Generation {
             index < point1 || index >= point2 ? gene : chromosomeB[index]
         );
 
-        console.group(`%c🧬 Two-Point Crossover (Points: ${point1}, ${point2})`, 'color: #00ff00; font-weight: bold; font-size: 14px;');
-        console.log('%cParent A:', 'color: #ff6b6b; font-weight: bold;', chromosomeA.map(g => g.toFixed(2)));
-        console.log('%cParent B:', 'color: #4ecdc4; font-weight: bold;', chromosomeB.map(g => g.toFixed(2)));
-        console.log('%cOffspring:', 'color: #ffd93d; font-weight: bold;', offspring.map(g => g.toFixed(2)));
-        console.log('%cMethod:', 'color: #95e1d3; font-style: italic;', `Take from A: [0-${point1}) and [${point2}-end], from B: [${point1}-${point2})`);
-        console.groupEnd();
-
         return offspring;
+    }
+
+    public isProgressing(windowSize: number = 5): boolean {
+        if (this.generationResults.length < windowSize * 2) {
+            return true;
+        }
+
+        const recentResults = this.generationResults.slice(-windowSize);
+        const olderResults = this.generationResults.slice(-windowSize * 2, -windowSize);
+
+        if (olderResults.length === 0) {
+            return true;
+        }
+
+        const recentAvgBestScore = recentResults.reduce((sum, r) => sum + r.bestScore, 0) / recentResults.length;
+        const olderAvgBestScore = olderResults.reduce((sum, r) => sum + r.bestScore, 0) / olderResults.length;
+
+        const recentAvgFitness = recentResults.reduce((sum, r) => sum + r.avgFitness, 0) / recentResults.length;
+        const olderAvgFitness = olderResults.reduce((sum, r) => sum + r.avgFitness, 0) / olderResults.length;
+
+        const recentAvgBirdsScoring = recentResults.reduce((sum, r) => sum + r.birdsWithScoreGreaterThan1, 0) / recentResults.length;
+        const olderAvgBirdsScoring = olderResults.reduce((sum, r) => sum + r.birdsWithScoreGreaterThan1, 0) / olderResults.length;
+
+        // For score: require at least 1 pipe improvement to count as progress
+        const scoreDifference = recentAvgBestScore - olderAvgBestScore;
+        const scoreImproved = scoreDifference >= 1;
+
+        // For fitness: use 10% threshold but only if absolute improvement is significant
+        const fitnessDifference = recentAvgFitness - olderAvgFitness;
+        const fitnessImproved = fitnessDifference > olderAvgFitness * 0.10;
+
+        // For birds scoring: require at least 1 more bird or 15% improvement
+        const birdsDifference = recentAvgBirdsScoring - olderAvgBirdsScoring;
+        const birdsImproved = birdsDifference >= 1 || birdsDifference > olderAvgBirdsScoring * 0.15;
+
+        return scoreImproved || fitnessImproved || birdsImproved;
+    }
+
+    public getGenerationResults(): GenerationResult[] {
+        return this.generationResults;
+    }
+
+    private adaptMutationChance(): void {
+        if (this.generation < 10 || this.generation % 3 !== 0) {
+            return;
+        }
+
+        const baseChance = config.mutationChance;
+        const minChance = baseChance * 0.5;
+        const maxChance = baseChance * 2;
+
+        if (this.isProgressing()) {
+            this.mutationChance = Math.max(minChance, this.mutationChance * 0.98);
+            NotificationService.info(`Evolution is progressing, decreasing mutation chance to ${this.mutationChance}.`);
+        } else {
+            this.mutationChance = Math.min(maxChance, this.mutationChance * 1.15);
+            NotificationService.info(`Progress is too low, increasing mutation chance to ${this.mutationChance}.`);
+        }
     }
 }

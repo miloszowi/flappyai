@@ -9,6 +9,11 @@ export const chartConfig: Object = {
             label: "Score",
             borderColor: "#84CB53",
             fill: false,
+        }, {
+            data: [0],
+            label: "Birds with Score >= 1",
+            borderColor: "#FF6B6B",
+            fill: false,
         }],
     },
     options: {

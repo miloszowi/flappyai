@@ -5,6 +5,7 @@ import { NeatapticNode } from "../Interfaces/NeatapticNode";
 import { Renderer } from "../Renderer";
 import { Wall } from "./Wall";
 import { InputData } from "../interfaces/InputData";
+import { NotificationService } from "../services/NotificationService";
 
 const { architect, methods } = require("neataptic");
 
@@ -27,7 +28,11 @@ export class Bird implements Entity {
 
 	public score: number = 0;
 
+	public isElite: boolean = false;
+
 	public network: any;
+
+	public birdIndex: number = 0;
 
 	public readonly sprite: PIXI.Sprite = new PIXI.Sprite(PIXI.Texture.WHITE);
 
@@ -47,23 +52,25 @@ export class Bird implements Entity {
 
 	private statsTooltip: HTMLElement | null = null;
 
-	private lastInputData: InputData = {
+	public lastInputData: InputData = {
 		centerGapDistance: 0,
 		closestPipeDistance: 0,
 		workingVelocity: 0
 	};
 
-	private lastRawInputData: InputData = {
+	public lastRawInputData: InputData = {
 		centerGapDistance: 0,
 		closestPipeDistance: 0,
 		workingVelocity: 0
 	};
 
-	private lastPipeIndex: number = -1;
+	public lastPipeIndex: number = 0;
 
-	private decisionFrameCounter: number = 0;
+	private isDying: boolean = false;
 
-	private readonly decisionFrameDelay: number = 45;
+	private hitFlashDuration: number = 0.2;
+
+	private hitFlashTimer: number = 0;
 
 	constructor(x: number, y: number, hiddenLayerSize: number, renderer: Renderer) {
 		this.renderer = renderer;
@@ -79,110 +86,58 @@ export class Bird implements Entity {
 		this.sprite.height = this.height;
 		this.sprite.interactive = true;
 		this.sprite.buttonMode = true;
+		this.fitness = 0;
+		this.score = 0;
 
 		this.setupNetwork(hiddenLayerSize);
 		this.setupHoverEvents();
+	}
+
+	public becomeElite(): void {
+		this.isElite = true;
+		this.alive = true;
+		this.score = 0;
+		this.sprite.filters = [this.renderer.getFilter()];
+		this.sprite.texture = this.textureElite;
+		this.renderer.pixi.stage.addChild(this.sprite)
 	}
 
 	private setupHoverEvents(): void {
 		this.sprite.on("pointerover", () => {
 			this.showStatsTooltip();
 		});
-
-		this.sprite.on("pointerout", () => {
-			this.hideStatsTooltip();
-		});
-	}
-
-	private showStatsTooltip(): void {
-		if (this.statsTooltip) {
-			this.hideStatsTooltip();
-		}
-
-		this.statsTooltip = document.createElement("div");
-		this.statsTooltip.className = "bird-stats-tooltip";
-		const networkViz = this.generateNetworkVisualization();
-
-		this.statsTooltip.innerHTML = `
-						<div class="stats-content">
-								<strong>Bird Stats</strong>
-								<div>Fitness: ${this.fitness.toFixed(2)}</div>
-								<div>Score: ${this.score}</div>
-								<div>Velocity: ${this.velocity.toFixed(2)}</div>
-								<div>Y Position: ${this.y.toFixed(0)}</div>
-								<hr style="margin: 5px 0; border: none; border-top: 1px solid #00ff00;">
-								<strong>Input Data</strong>
-								<div>Gap distance: ${this.lastRawInputData.centerGapDistance} (norm: ${this.lastInputData.centerGapDistance})</div>
-								<div>Pipe distance: ${this.lastRawInputData.closestPipeDistance} (norm: ${this.lastInputData.closestPipeDistance})</div>
-								<div>Velocity: ${this.lastRawInputData.workingVelocity} (norm: ${this.lastInputData.workingVelocity})</div>
-								<hr style="margin: 5px 0; border: none; border-top: 1px solid #00ff00;">
-								<strong>Neural Network</strong>
-								${networkViz}
-						</div>
-				`;
-
-		document.body.appendChild(this.statsTooltip);
-		this.updateTooltipPosition();
-	}
-
-	private hideStatsTooltip(): void {
-		if (this.statsTooltip) {
-			this.statsTooltip.remove();
-			this.statsTooltip = null;
-		}
-	}
-
-	private updateTooltipPosition(): void {
-		if (!this.statsTooltip) {
-			return;
-		}
-
-		const rect = this.renderer.pixi.view.getBoundingClientRect();
-		let tooltipX = rect.left + this.x + 20;
-		let tooltipY = rect.top + this.y - 30;
-
-		const tooltipRect = this.statsTooltip.getBoundingClientRect();
-		const tooltipWidth = tooltipRect.width;
-		const tooltipHeight = tooltipRect.height;
-
-		if (tooltipX + tooltipWidth > window.innerWidth - 10) {
-			tooltipX = window.innerWidth - tooltipWidth - 10;
-		}
-		if (tooltipX < 10) {
-			tooltipX = 10;
-		}
-		if (tooltipY < 10) {
-			tooltipY = rect.top + this.y + 30;
-		}
-		if (tooltipY + tooltipHeight > window.innerHeight - 10) {
-			tooltipY = window.innerHeight - tooltipHeight - 10;
-		}
-
-		this.statsTooltip.style.position = "fixed";
-		this.statsTooltip.style.left = `${tooltipX}px`;
-		this.statsTooltip.style.top = `${tooltipY}px`;
-		this.statsTooltip.style.zIndex = "10000";
 	}
 
 	public update(delta: number): void | boolean {
+		if (this.isDying) {
+			this.acceleration += 0.8 * delta;
+			this.y += this.velocity * delta;
+			this.velocity += this.acceleration;
+			this.acceleration = 0;
+
+			this.sprite.rotation += 0.15;
+
+			this.hitFlashTimer += delta;
+			this.render();
+
+			const screenBottom = this.renderer.pixi.screen.height;
+			if (this.y > screenBottom) {
+				this.renderer.pixi.stage.removeChild(this.sprite);
+				this.isDying = false;
+			}
+
+			return false;
+		}
+
 		if (!this.alive) {
 			return false;
 		}
 
-		this.decisionFrameCounter++;
-		if (this.decisionFrameCounter >= this.decisionFrameDelay) {
-			if (this.decidedToJump()) {
-				this.jump(100 * delta);
-			}
-			this.decisionFrameCounter = 0;
+		if (this.decidedToJump()) {
+			this.jump(100 * delta);
 		}
 
-		this.fitness += 0.005;
-
-		if (this.score > this.lastPipeIndex) {
-			this.fitness += 20;
-			this.lastPipeIndex = this.score;
-		}
+		this.fitness += 0.01;
 
 		this.acceleration += 0.8 * delta;
 		this.y += this.velocity * delta;
@@ -194,19 +149,23 @@ export class Bird implements Entity {
 			Math.min(this.velocity, this.maxVelocity)
 		);
 
-		if (this.flewOut() || this.isCollision()) {
+		if (this.isCollision() || this.flewOut()) {
 			this.die();
+			this.score = this.renderer.pipesCount;
 
 			if (this.flewOut()) {
-				this.fitness -= 0.20;
+				this.fitness -= 50;
 			}
 
 			return false;
 		}
 
 		const distToGapCenter = this.renderer.distanceToGapCenter(this.y);
-		const normalizedDist = distToGapCenter / this.renderer.pixi.screen.height;
-		this.fitness -= Math.pow(normalizedDist, 2) * 0.1;
+		const normalizedDist = Math.abs(distToGapCenter) / this.renderer.pixi.screen.height;
+
+		if (normalizedDist < 0.1) {
+			this.fitness += 0.02;
+		}
 
 		this.render();
 	}
@@ -214,15 +173,29 @@ export class Bird implements Entity {
 	public render(): void {
 		this.sprite.x = this.x;
 		this.sprite.y = this.y;
-		this.sprite.rotation = this.velocity / 20;
+		if (!this.isDying) {
+			this.sprite.rotation = this.velocity / 20;
+		} else {
+			const flashProgress = (this.hitFlashTimer / this.hitFlashDuration) % 1;
+			const isFlashing = flashProgress < 0.5;
+			this.sprite.tint = isFlashing ? 0xFF6B6B : 0xFFFFFF;
+		}
+	}
+
+	public remove(): void {
+		this.renderer.pixi.stage.removeChild(this.sprite);
 	}
 
 	public die(): void {
 		this.alive = false;
+		this.isDying = true;
+		this.hitFlashTimer = 0;
 		this.hideStatsTooltip();
-		const distance = this.renderer.getDistance(this.x, this.y);
-		this.fitness += 1 / distance;
+		this.fitness += this.score * 1.5;
+
 		this.renderer.pixi.stage.removeChild(this.sprite);
+		this.renderer.pixi.stage.addChild(this.sprite);
+
 		this.renderer.birdsAlive -= 1;
 		this.renderer.updateInfo();
 	}
@@ -234,9 +207,12 @@ export class Bird implements Entity {
 			this.network.connections[index].weight = chromosome[chromosomeIndex++];
 
 			if (Math.random() < mutationChance) {
-				const weight = Math.random() * 2 - 1;
-				this.network.connections[index].weight = weight;
-				this.renderer.mutated += 1;
+				if (Math.random() < 0.1) {
+					this.network.connections[index].weight = Math.random() * 2 - 1;
+				} else {
+					this.network.connections[index].weight += (Math.random() - 0.5) * 0.4;
+					this.network.connections[index].weight = Math.max(-1, Math.min(1, this.network.connections[index].weight));
+				}
 			}
 		});
 
@@ -244,8 +220,12 @@ export class Bird implements Entity {
 			this.network.nodes[index].bias = chromosome[chromosomeIndex++];
 
 			if (Math.random() < mutationChance) {
-				const bias = Math.random() * 2 - 1;
-				this.network.nodes[index].bias = bias;
+				if (Math.random() < 0.1) {
+					this.network.nodes[index].bias = Math.random() * 2 - 1;
+				} else {
+					this.network.nodes[index].bias += (Math.random() - 0.5) * 0.4;
+					this.network.nodes[index].bias = Math.max(-1, Math.min(1, this.network.nodes[index].bias));
+				}
 				this.renderer.mutated += 1;
 			}
 		});
@@ -255,7 +235,7 @@ export class Bird implements Entity {
 		this.acceleration -= x;
 	}
 
-	private decidedToJump(): number {
+	private decidedToJump(): boolean {
 		const distToGapCenter = this.renderer.distanceToGapCenter(this.y);
 		const horizontalDist = this.renderer.horizontalDistanceToClosestPipe(this.x);
 
@@ -276,7 +256,11 @@ export class Bird implements Entity {
 			workingVelocity: +normalizedVelocity.toFixed(5)
 		}
 
-		return Math.round(this.network.activate(input));
+		const activationValue = this.network.activate(input)[0];
+		const decision = activationValue > 0.5;
+
+		this.renderer.updateBirdSummary(this, this.birdIndex, decision, activationValue);
+		return decision;
 	}
 
 	private flewOut(): boolean {
@@ -294,9 +278,8 @@ export class Bird implements Entity {
 		const collision = this.hitTestRectangle(this.sprite, top.sprite) || this.hitTestRectangle(this.sprite, bottom.sprite);
 
 		if (!collision) {
-			if (this.x + this.width > top.x + top.width) {
+			if (this.x + this.width + 10 > top.x + top.width) {
 				this.renderer.pipesCount += 1;
-				this.score += 1;
 				this.renderer.walls.shift();
 			}
 			return collision;
@@ -333,30 +316,116 @@ export class Bird implements Entity {
 	private setupNetwork(hiddenLayerSize: number): void {
 		this.network = new architect.Perceptron(3, hiddenLayerSize, 1);
 
-		this.network.nodes.forEach((node: NeatapticNode) => {
-			node.activation = methods.activation.SIGMOID;
+		const inputLayerSize = 3;
+		const totalNodes = this.network.nodes.length;
+		const outputNodeIndex = totalNodes - 1;
+
+		this.network.connections.forEach((connection: NeatapticConnection) => {
+			connection.weight = Math.random() * 2 - 1;
 		});
 
-		this.network.connections.map((_connection: NeatapticConnection, index: number) => {
-			this.network.connections[index].weight = Math.random() * 2 - 1;
-		});
-
-		this.network.nodes.map((_node: NeatapticNode, index: number) => {
-			this.network.nodes[index].bias = Math.random() * 2 - 1;
+		this.network.nodes.forEach((node: NeatapticNode, index: number) => {
+			if (index >= inputLayerSize) {
+				node.bias = Math.random() * 2 - 1;
+			}
 		});
 	}
 
+
+	public saveChromosome(): string {
+		const chromosome = {
+			weights: this.network.connections.map((conn: NeatapticConnection) => conn.weight),
+			biases: this.network.nodes.map((node: NeatapticNode) => node.bias),
+			fitness: this.fitness,
+			score: this.score,
+			timestamp: new Date().toISOString()
+		};
+		return JSON.stringify(chromosome);
+	}
+
+	public loadChromosome(chromosomeJson: string): void {
+		try {
+			const chromosome = JSON.parse(chromosomeJson);
+
+			if (chromosome.weights && chromosome.weights.length === this.network.connections.length) {
+				chromosome.weights.forEach((weight: number, index: number) => {
+					this.network.connections[index].weight = weight;
+				});
+			}
+
+			if (chromosome.biases && chromosome.biases.length === this.network.nodes.length) {
+				chromosome.biases.forEach((bias: number, index: number) => {
+					this.network.nodes[index].bias = bias;
+				});
+			}
+		} catch (error) {
+			console.error("Failed to load chromosome:", error);
+		}
+	}
+
+	private handleSaveChromosome(): void {
+		const { ModelManager } = require("../services/ModelManager");
+		const modelName = prompt("Enter model name:", `Bird_${this.score}_${Date.now()}`);
+		if (modelName) {
+			const chromosome = this.saveChromosome();
+			ModelManager.saveModel(modelName, chromosome, this.network.nodes.length - 1);
+			NotificationService.success(`Model downloaded: ${modelName}`);
+		}
+	}
+
+	private handleLoadChromosome(): void {
+		const { ModelManager } = require("../services/ModelManager");
+		const input = document.createElement("input");
+		input.type = "file";
+		input.accept = ".json";
+		input.onchange = async (event: any) => {
+			const file = event.target.files[0];
+			if (file) {
+				const model = await ModelManager.loadFromFile(file);
+				if (model) {
+					this.loadChromosome(JSON.stringify(model.chromosome));
+					NotificationService.success(`Loaded: ${model.name}`);
+				} else {
+					NotificationService.error("Failed to load model from file");
+				}
+			}
+		};
+		input.click();
+	}
+
+
 	private generateNetworkVisualization(): string {
-		const inputLabels = ["gap", "x", "vel"];
+		const inputLabels = ["gap", "pipe", "vel"];
 		const inputData = this.lastInputData;
 		const hiddenNodes = this.network.nodes.filter((node: any) => node.type === "hidden");
 		const outputNodes = this.network.nodes.filter((node: any) => node.type === "output");
 
 		const canvasId = `network-canvas-${Math.random().toString(36).substr(2, 9)}`;
+		const dpr = window.devicePixelRatio || 1;
 
-		let html = `<canvas id="${canvasId}" class="network-canvas" width="700" height="400"></canvas>`;
+		let html = `<div class="network-container"><canvas id="${canvasId}" class="network-canvas"></canvas></div>`;
 
 		setTimeout(() => {
+			const canvas = document.getElementById(canvasId) as HTMLCanvasElement;
+			if (canvas) {
+				const container = canvas.parentElement;
+				if (container) {
+					const rect = container.getBoundingClientRect();
+					const width = rect.width;
+					const height = rect.height;
+
+					canvas.width = width * dpr;
+					canvas.height = height * dpr;
+
+					canvas.style.width = `${width}px`;
+					canvas.style.height = `${height}px`;
+
+					const ctx = canvas.getContext("2d");
+					if (ctx) {
+						ctx.scale(dpr, dpr);
+					}
+				}
+			}
 			this.drawNetworkDiagram(canvasId, inputLabels, inputData, hiddenNodes, outputNodes);
 		}, 0);
 
@@ -376,10 +445,11 @@ export class Bird implements Entity {
 		const ctx = canvas.getContext("2d");
 		if (!ctx) return;
 
-		const width = canvas.width;
-		const height = canvas.height;
-		const padding = 40;
-		const nodeRadius = 9;
+		const dpr = window.devicePixelRatio || 1;
+		const width = canvas.width / dpr;
+		const height = canvas.height / dpr;
+		const padding = Math.max(width * 0.08, 30);
+		const nodeRadius = Math.max(width * 0.012, 6);
 
 		ctx.fillStyle = "rgba(0, 10, 0, 0.3)";
 		ctx.fillRect(0, 0, width, height);
@@ -387,8 +457,8 @@ export class Bird implements Entity {
 		const inputValues = [inputData.centerGapDistance, inputData.closestPipeDistance, inputData.workingVelocity];
 		const layers = [inputValues, hiddenNodes, outputNodes];
 		const layerSpacing = (width - 2 * padding) / (layers.length - 1);
-		const topMargin = 70;
-		const bottomMargin = 30;
+		const topMargin = Math.max(height * 0.18, 50);
+		const bottomMargin = Math.max(height * 0.08, 20);
 
 		ctx.strokeStyle = "rgba(0, 200, 0, 0.25)";
 		ctx.lineWidth = 0.7;
@@ -420,6 +490,28 @@ export class Bird implements Entity {
 					ctx.moveTo(x1, y1);
 					ctx.lineTo(x2, y2);
 					ctx.stroke();
+
+					const midX = (x1 + x2) / 2;
+					const midY = (y1 + y2) / 2;
+					const connectionIndex = i * nextLayer.length + j;
+					const connection = this.network.connections[connectionIndex];
+					const weight = connection ? connection.weight : 0;
+					const weightText = weight.toFixed(2);
+
+					const fontSize = Math.max(width * 0.013, 7) - 3;
+					ctx.font = `${fontSize}px monospace`;
+					const textMetrics = ctx.measureText(weightText);
+					const textWidth = textMetrics.width;
+					const textHeight = fontSize;
+					const textPadding = 2;
+
+					ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+					ctx.fillRect(midX - textWidth / 2 - textPadding, midY - textHeight / 2 - textPadding, textWidth + textPadding * 2, textHeight + textPadding * 2);
+
+					ctx.fillStyle = "#000000";
+					ctx.textAlign = "center";
+					ctx.textBaseline = "middle";
+					ctx.fillText(weightText, midX, midY);
 				}
 			}
 		}
@@ -466,12 +558,52 @@ export class Bird implements Entity {
 				ctx.globalAlpha = 1;
 
 				if (isInput && labels) {
+					const labelFontSize = Math.max(width * 0.02, 11) - 5;
+					const valueFontSize = Math.max(width * 0.018, 9) - 5;
+					const labelOffset = width * 0.02;
+
 					ctx.fillStyle = "#00dd00";
-					ctx.font = "bold 14px monospace";
+					ctx.font = `bold ${labelFontSize}px monospace`;
+					ctx.textAlign = "right";
+					ctx.fillText(labels[idx], x - labelOffset, y);
+
+					ctx.font = `${valueFontSize}px monospace`;
 					ctx.textAlign = "center";
-					ctx.fillText(labels[idx], x, y - 15);
-					ctx.font = "12px monospace";
-					ctx.fillText(value.toFixed(2), x, y + 23);
+					ctx.fillText(value.toFixed(2), x, y + labelFontSize + 7);
+				} else if (!isInput) {
+					const bias = item.bias || 0;
+					const stableFontSize = Math.max(width * 0.015, 8);
+
+					if (isOutput) {
+						ctx.fillStyle = "rgba(0, 255, 0, 0.8)";
+						ctx.font = `${stableFontSize}px monospace`;
+						ctx.textAlign = "center";
+						ctx.textBaseline = "middle";
+						ctx.fillText(`a:${value.toFixed(2)}`, x, y - stableFontSize - 5);
+
+						ctx.fillStyle = "rgba(255, 150, 150, 0.8)";
+						ctx.font = `${stableFontSize}px monospace`;
+						ctx.textAlign = "center";
+						ctx.textBaseline = "middle";
+						ctx.fillText(`b:${bias.toFixed(2)}`, x, y + stableFontSize + 5);
+					} else {
+						const nodeCount = layer.length;
+						const baseFontSize = Math.max(width * 0.015, 8);
+						const scaledFontSize = Math.max(baseFontSize * (5 / nodeCount), 6) + 3;
+						const offsetX = nodeRadius + 3;
+
+						ctx.fillStyle = "rgba(100, 255, 200, 0.8)";
+						ctx.font = `${scaledFontSize}px monospace`;
+						ctx.textAlign = "left";
+						ctx.textBaseline = "middle";
+						ctx.fillText(`a:${value.toFixed(2)}`, x + offsetX, y - scaledFontSize / 2);
+
+						ctx.fillStyle = "rgba(255, 150, 150, 0.8)";
+						ctx.font = `${scaledFontSize}px monospace`;
+						ctx.textAlign = "left";
+						ctx.textBaseline = "middle";
+						ctx.fillText(`b:${bias.toFixed(2)}`, x + offsetX, y + scaledFontSize / 2);
+					}
 				}
 			});
 		};
@@ -480,11 +612,113 @@ export class Bird implements Entity {
 		drawLayer(hiddenNodes, padding + layerSpacing, false, false);
 		drawLayer(outputNodes, padding + 2 * layerSpacing, false, true);
 
-		ctx.fillStyle = "#911cffff";
-		ctx.font = "bold 16px monospace";
+		const titleFontSize = Math.max(width * 0.024, 14);
+		ctx.fillStyle = "#73f75bff";
+		ctx.font = `bold ${titleFontSize}px monospace`;
 		ctx.textAlign = "center";
-		ctx.fillText("INPUT", padding, 30);
-		ctx.fillText(`HIDDEN`, padding + layerSpacing, 30);
-		ctx.fillText("OUTPUT", padding + 2 * layerSpacing, 30);
+		ctx.fillText("INPUT", padding, titleFontSize + 5);
+		ctx.fillText(`HIDDEN`, padding + layerSpacing, titleFontSize + 5);
+		ctx.fillText("OUTPUT", padding + 2 * layerSpacing, titleFontSize + 5);
+	}
+
+	private showStatsTooltip(): void {
+		const existingTooltips = document.querySelectorAll(".bird-stats-tooltip");
+		existingTooltips.forEach(tooltip => tooltip.remove());
+
+		if (this.statsTooltip) {
+			this.hideStatsTooltip();
+		}
+
+		this.statsTooltip = document.createElement("div");
+		this.statsTooltip.className = "bird-stats-tooltip";
+		const networkViz = this.generateNetworkVisualization();
+
+		this.statsTooltip.innerHTML = `
+						<div class="stats-content">
+								<strong>Bird Stats</strong>
+								<div>Fitness: ${this.fitness.toFixed(2)}</div>
+								<div>Velocity: ${this.velocity.toFixed(2)}</div>
+								<div>Y Position: ${this.y.toFixed(0)}</div>
+								<div>Elite: ${this.isElite ? "YES" : "NO"}</div>
+								<hr style="margin: 5px 0; border: none; border-top: 1px solid #00ff00;">
+								<strong>Input Data</strong>
+								<div>Gap distance: ${this.lastRawInputData.centerGapDistance} (norm: ${this.lastInputData.centerGapDistance})</div>
+								<div>Pipe distance: ${this.lastRawInputData.closestPipeDistance} (norm: ${this.lastInputData.closestPipeDistance})</div>
+								<div>Velocity: ${this.lastRawInputData.workingVelocity} (norm: ${this.lastInputData.workingVelocity})</div>
+								<hr style="margin: 5px 0; border: none; border-top: 1px solid #00ff00;">
+								<strong>Neural Network</strong>
+								${networkViz}
+								<hr style="margin: 5px 0; border: none; border-top: 1px solid #00ff00;">
+								<div style="display: flex; gap: 8px; margin-top: 10px;">
+									<button id="save-chromosome-btn" style="flex: 1; padding: 8px; background: #00aa00; color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-family: monospace;">💾 Save</button>
+									<button id="load-chromosome-btn" style="flex: 1; padding: 8px; background: #0088ff; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-family: monospace;">📥 Load</button>
+								</div>
+						</div>
+				`;
+
+		document.body.appendChild(this.statsTooltip);
+
+		const saveBtn = this.statsTooltip.querySelector("#save-chromosome-btn") as HTMLButtonElement;
+		const loadBtn = this.statsTooltip.querySelector("#load-chromosome-btn") as HTMLButtonElement;
+
+		if (saveBtn) {
+			saveBtn.addEventListener("click", () => this.handleSaveChromosome());
+		}
+
+		if (loadBtn) {
+			loadBtn.addEventListener("click", () => this.handleLoadChromosome());
+		}
+
+		const clickOutsideHandler = (event: MouseEvent) => {
+			if (this.statsTooltip && !this.statsTooltip.contains(event.target as Node)) {
+				this.hideStatsTooltip();
+				document.removeEventListener("click", clickOutsideHandler);
+			}
+		};
+
+		setTimeout(() => {
+			document.addEventListener("click", clickOutsideHandler);
+		}, 0);
+
+		this.updateTooltipPosition();
+	}
+
+	private hideStatsTooltip(): void {
+		if (this.statsTooltip) {
+			this.statsTooltip.remove();
+			this.statsTooltip = null;
+		}
+	}
+
+	private updateTooltipPosition(): void {
+		if (!this.statsTooltip) {
+			return;
+		}
+
+		const rect = this.renderer.pixi.view.getBoundingClientRect();
+		let tooltipX = rect.left + this.x + 20;
+		let tooltipY = rect.top + this.y - 30;
+
+		const tooltipRect = this.statsTooltip.getBoundingClientRect();
+		const tooltipWidth = tooltipRect.width;
+		const tooltipHeight = tooltipRect.height;
+
+		if (tooltipX + tooltipWidth > window.innerWidth - 10) {
+			tooltipX = window.innerWidth - tooltipWidth - 10;
+		}
+		if (tooltipX < 10) {
+			tooltipX = 10;
+		}
+		if (tooltipY < 10) {
+			tooltipY = rect.top + this.y + 30;
+		}
+		if (tooltipY + tooltipHeight > window.innerHeight - 10) {
+			tooltipY = window.innerHeight - tooltipHeight - 10;
+		}
+
+		this.statsTooltip.style.position = "fixed";
+		this.statsTooltip.style.left = `${tooltipX}px`;
+		this.statsTooltip.style.top = `${tooltipY}px`;
+		this.statsTooltip.style.zIndex = "10000";
 	}
 }

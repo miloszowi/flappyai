@@ -15,7 +15,7 @@ export class Wall implements Entity {
 
     public created: boolean = false;
 
-    public readonly sprite: PIXI.Sprite;
+    public sprite: PIXI.Sprite;
 
     private renderer: Renderer;
 
@@ -23,11 +23,43 @@ export class Wall implements Entity {
         this.x = x;
         this.y = y;
         this.height = height;
-        this.sprite = PIXI.Sprite.fromImage(`pipes/pipe_${type}.png`);
+        this.renderer = renderer;
+
+        const fullTexture = PIXI.Texture.from(`pipes/pipe_${type}.png`);
+
+        this.sprite = new PIXI.Sprite(fullTexture);
         this.sprite.width = this.width;
         this.sprite.height = this.height;
         this.sprite.anchor.set(0.5);
-        this.renderer = renderer;
+
+        if (fullTexture.valid) {
+            this.applyCrop(fullTexture, height, type);
+        } else {
+            fullTexture.once('update', () => {
+                this.applyCrop(fullTexture, height, type);
+            });
+        }
+    }
+
+    private applyCrop(fullTexture: PIXI.Texture, height: number, type: string): void {
+        const croppedTexture = this.getCroppedTexture(fullTexture, height, type);
+        this.sprite.texture = croppedTexture;
+    }
+
+    private getCroppedTexture(fullTexture: PIXI.Texture, height: number, type: string): PIXI.Texture {
+        const fullHeight = fullTexture.height;
+        const fullWidth = fullTexture.width;
+
+        let cropRect: PIXI.Rectangle;
+
+        if (type === 'top') {
+            const startY = Math.max(0, fullHeight - height);
+            cropRect = new PIXI.Rectangle(0, startY, fullWidth, Math.min(height, fullHeight));
+        } else {
+            cropRect = new PIXI.Rectangle(0, 0, fullWidth, Math.min(height, fullHeight));
+        }
+
+        return new PIXI.Texture(fullTexture.baseTexture, cropRect);
     }
 
     public update(delta: number): void | boolean {
