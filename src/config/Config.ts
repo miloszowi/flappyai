@@ -3,8 +3,8 @@ import { GenerationData } from "../interfaces/GenerationData";
 
 export const config: GenerationData = {
     mutationChance: 0.05,
-    size: 50,
-    pipeDistance: 20,
+    size: 100,
+    pipeDistance: 35,
     speed: 1,
     hiddenLayerSize: 6,
     pipeGap: 25,

@@ -26,6 +26,12 @@ export class Generation {
 
     private generationResults: GenerationResult[] = [];
 
+    private intervalId: number | null = null;
+
+    private keyupHandler: ((e: KeyboardEvent) => void) | null = null;
+
+    private static readonly MAX_GENERATION_RESULTS = 100;
+
     constructor(renderer: Renderer) {
         this.renderer = renderer;
 
@@ -43,17 +49,27 @@ export class Generation {
         this.generation++;
 
         const sortedBirds = [...this.birds].sort((a, b) => b.fitness - a.fitness);
-        const birdsWithScore = sortedBirds.filter(b => b.score >= 1).length;
+
+        let birdsWithScore = 0;
+        let totalFitness = 0;
+        for (const bird of sortedBirds) {
+            if (bird.score >= 1) birdsWithScore++;
+            totalFitness += bird.fitness;
+        }
 
         const generationResult: GenerationResult = {
             generation: this.generation - 1,
             bestScore: sortedBirds[0].score,
             bestFitness: sortedBirds[0].fitness,
-            avgFitness: sortedBirds.reduce((sum, b) => sum + b.fitness, 0) / sortedBirds.length,
+            avgFitness: totalFitness / sortedBirds.length,
             maxFitness: sortedBirds[0].fitness,
             birdsWithScoreGreaterThan1: birdsWithScore
         };
         this.generationResults.push(generationResult);
+
+        if (this.generationResults.length > Generation.MAX_GENERATION_RESULTS) {
+            this.generationResults.shift();
+        }
 
         this.adaptMutationChance();
 
@@ -176,19 +192,32 @@ export class Generation {
             this.birds.push(bird);
         }
 
-        setInterval(() => {
+        this.intervalId = setInterval(() => {
             if (this.hasDiedOut()) {
                 this.nextGeneration();
             }
 
             this.renderer.updateBirdsPanel(this.birds);
-        }, 100);
+        }, 100) as unknown as number;
 
-        document.addEventListener("keyup", e => {
+        this.keyupHandler = (e: KeyboardEvent) => {
             if (e.key == "n" || e.key == "N") {
                 this.nextGeneration();
             }
-        })
+        };
+        document.addEventListener("keyup", this.keyupHandler);
+    }
+
+    public cleanup(): void {
+        if (this.intervalId !== null) {
+            clearInterval(this.intervalId);
+            this.intervalId = null;
+        }
+
+        if (this.keyupHandler !== null) {
+            document.removeEventListener("keyup", this.keyupHandler);
+            this.keyupHandler = null;
+        }
     }
 
     private terminate(): void {
@@ -209,7 +238,7 @@ export class Generation {
     }
 
     private hasDiedOut(): boolean {
-        return this.renderer.birdsAlive === 0;
+        return this.renderer.birdsAlive <= 0;
     }
 
     private crossOver(chromosomeA: number[], chromosomeB: number[], breedingMethod: BreedingMethod): number[] {
@@ -279,15 +308,12 @@ export class Generation {
         const recentAvgBirdsScoring = recentResults.reduce((sum, r) => sum + r.birdsWithScoreGreaterThan1, 0) / recentResults.length;
         const olderAvgBirdsScoring = olderResults.reduce((sum, r) => sum + r.birdsWithScoreGreaterThan1, 0) / olderResults.length;
 
-        // For score: require at least 1 pipe improvement to count as progress
         const scoreDifference = recentAvgBestScore - olderAvgBestScore;
         const scoreImproved = scoreDifference >= 1;
 
-        // For fitness: use 10% threshold but only if absolute improvement is significant
         const fitnessDifference = recentAvgFitness - olderAvgFitness;
         const fitnessImproved = fitnessDifference > olderAvgFitness * 0.10;
 
-        // For birds scoring: require at least 1 more bird or 15% improvement
         const birdsDifference = recentAvgBirdsScoring - olderAvgBirdsScoring;
         const birdsImproved = birdsDifference >= 1 || birdsDifference > olderAvgBirdsScoring * 0.15;
 
@@ -303,15 +329,11 @@ export class Generation {
             return;
         }
 
-        const baseChance = config.mutationChance;
-        const minChance = baseChance * 0.5;
-        const maxChance = baseChance * 2;
-
         if (this.isProgressing()) {
-            this.mutationChance = Math.max(minChance, this.mutationChance * 0.98);
+            this.mutationChance -= 0.01;
             NotificationService.info(`Evolution is progressing, decreasing mutation chance to ${this.mutationChance}.`);
         } else {
-            this.mutationChance = Math.min(maxChance, this.mutationChance * 1.15);
+            this.mutationChance += 0.01;
             NotificationService.info(`Progress is too low, increasing mutation chance to ${this.mutationChance}.`);
         }
     }

@@ -90,5 +90,10 @@ export class Wall implements Entity {
     public hide(): void {
         this.alive = false;
         this.renderer.pixi.stage.removeChild(this.sprite);
+
+        if ((this as any).tickerCallback) {
+            this.renderer.pixi.ticker.remove((this as any).tickerCallback);
+            (this as any).tickerCallback = null;
+        }
     }
 }

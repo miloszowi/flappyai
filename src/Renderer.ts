@@ -104,10 +104,13 @@ export class Renderer {
         instance.sprite.height = instance.height;
         instance.render();
 
-        this.pixi.ticker.add(delta => {
+        const tickerCallback = (delta: number) => {
             instance.update(delta);
             this.delta = delta;
-        });
+        };
+
+        (instance as any).tickerCallback = tickerCallback;
+        this.pixi.ticker.add(tickerCallback);
     }
 
     public distanceToGapCenter(y: number): number {

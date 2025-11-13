@@ -184,6 +184,11 @@ export class Bird implements Entity {
 
 	public remove(): void {
 		this.renderer.pixi.stage.removeChild(this.sprite);
+
+		if ((this as any).tickerCallback) {
+			this.renderer.pixi.ticker.remove((this as any).tickerCallback);
+			(this as any).tickerCallback = null;
+		}
 	}
 
 	public die(): void {
@@ -330,7 +335,6 @@ export class Bird implements Entity {
 			}
 		});
 	}
-
 
 	public saveChromosome(): string {
 		const chromosome = {
